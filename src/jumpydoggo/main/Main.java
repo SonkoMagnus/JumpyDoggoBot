@@ -2,8 +2,10 @@ package jumpydoggo.main;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Random;
 
 import bwapi.DefaultBWListener;
 import bwapi.Game;
@@ -46,11 +48,26 @@ public class Main extends DefaultBWListener {
     enum WorkerRole { MINERAL, GAS, BUILD, FIGHT, SCOUT}    
     HashMap<WorkerRole, ArrayList<Integer>> workerIdsByRole = new HashMap<WorkerRole, ArrayList<Integer>>();
     HashMap<Integer, Unit> unitsById = new HashMap<Integer, Unit>();
+    HashMap<UnitType, HashSet<Integer>> unitIdsByType  = new HashMap<UnitType, HashSet<Integer>>();
+    
+    Random rand = new Random();
     
     public void run() {
         mirror.getModule().setEventListener(this);
         mirror.startGame(false);
     }
+    
+    public Unit getWorkerFromRole(WorkerRole role) { 
+    	System.out.println(workerIdsByRole);
+    	if (workerIdsByRole.get(role).isEmpty()) {
+    		return null;
+    	} else {
+    		System.out.println("blep");
+    		Integer size = workerIdsByRole.get(role).size();
+    		return unitsById.get(workerIdsByRole.get(role).get(rand.nextInt(size)));
+    	}
+    }
+    
     
 	@Override
 	public void onStart() {
@@ -59,11 +76,25 @@ public class Main extends DefaultBWListener {
 		game.setLocalSpeed(30);
 		game.enableFlag(1);
 
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1, PlannedItemStatus.PLANNED));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1, PlannedItemStatus.PLANNED));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1, PlannedItemStatus.PLANNED));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1, PlannedItemStatus.PLANNED));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1, PlannedItemStatus.PLANNED));
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
+		PlannedItemPrereq pip1 = new PlannedItemPrereq(UnitType.Zerg_Drone, 9, false);
+		PlannedItemPrereq cancelReq = new PlannedItemPrereq(UnitType.Zerg_Drone, 1, true);
+		PlannedItem trickExt = new PlannedItem(PlannedItemType.BUILDING, UnitType.Zerg_Extractor, 16, 1 );
+		
+		PlannedItem overDrone = new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 16, 1);
+		PlannedItemPrereq pipEx = new PlannedItemPrereq(UnitType.Zerg_Extractor, 1, true);
+		overDrone.getPrereqList().add(pipEx);
+		
+		trickExt.getPrereqList().add(pip1);
+		trickExt.setDoCancel(true);
+		trickExt.getCancelPrereqList().add(cancelReq);
+		plannedItems.add(trickExt);
+		plannedItems.add(overDrone);
+		
 		for (WorkerRole wr : WorkerRole.values()) {
 			workerIdsByRole.put(wr, new ArrayList<Integer>());
 		}
@@ -73,6 +104,8 @@ public class Main extends DefaultBWListener {
 	@Override
 	public void onUnitRenegade(Unit unit) {
 		if (unit.getPlayer() == self) {
+			unitsById.put(unit.getID(), unit);
+			unitIdsByType.getOrDefault(unit.getType(), new HashSet<Integer>()).add(unit.getID());
 			if (unit.getType() == UnitType.Zerg_Extractor) {
 				for (PlannedItem pi : plannedItems) {
 					if (pi.getUnitType() == UnitType.Zerg_Extractor
@@ -90,12 +123,27 @@ public class Main extends DefaultBWListener {
 	
 	@Override
 	public void onUnitMorph(Unit unit) {
-		System.out.println(unit.getType() + " with id: " + unit.getID() + " morphed");
 		if (unit.getPlayer() == self) {
-			System.out.println(unit.getType() + ": DEBÜG BÜILD TYPE:" + unit.getBuildType());
+			UnitType precursor = unit.getType().whatBuilds().first;
+			if (unit.getType() == UnitType.Zerg_Lurker) {
+				unitIdsByType.get(UnitType.Zerg_Lurker_Egg).remove(unit.getID());
+			} else if (unit.getType() == UnitType.Zerg_Guardian || unit.getType() == UnitType.Zerg_Devourer) {
+				unitIdsByType.get(UnitType.Zerg_Cocoon).remove(unit.getID());
+			} else {
+				if (unitIdsByType.containsKey(UnitType.Zerg_Egg)) {
+					unitIdsByType.get(UnitType.Zerg_Egg).remove(unit.getID());
+				}
+			}
+		
+			if (unitIdsByType.containsKey(precursor)) {
+				unitIdsByType.get(precursor).remove(unit.getID());
+			}
+			
+			unitIdsByType.putIfAbsent(unit.getType(), new HashSet<Integer>());
+			unitIdsByType.get(unit.getType()).add(unit.getID());
 		for (PlannedItem pi : plannedItems) {
 			if (pi.plannedItemType == PlannedItemType.BUILDING) {
-			if (pi.getUnitType() == unit.getType()  && pi.getStatus() == PlannedItemStatus.WORKER_ASSIGNED) {
+			if (pi.getUnitType() == unit.getType()  && pi.getStatus() == PlannedItemStatus.BUILDER_ASSIGNED) {
 				reservedMinerals -= pi.getUnitType().mineralPrice();
 				reservedGas -= pi.getUnitType().gasPrice();
 				pi.setStatus(PlannedItemStatus.MORPHING);
@@ -107,6 +155,7 @@ public class Main extends DefaultBWListener {
 				reservedGas -= pi.getUnitType().gasPrice();
 				pi.setStatus(PlannedItemStatus.MORPHING);
 				pi.setUnitId(unit.getID());
+				System.out.println("Setting unit: " + pi.getUnitType() + " ID:" + unit.getID() +" to MORPHING");
 			}
 		}
 		
@@ -123,11 +172,11 @@ public class Main extends DefaultBWListener {
 	
 	@Override
 	public void onUnitDestroy(Unit unit) {
-		System.out.println(unit.getType() + " with id: " + unit.getID() + " destroyed");
 		if (unit.getPlayer() == self) {
+			unitIdsByType.get(unit.getType()).remove(unit.getID());
 			unitsById.remove(unit.getID());		
 			for (PlannedItem pi : plannedItems) {
-				if (pi.getBuilderId() != null && pi.getBuilderId() == unit.getID()) {
+			if (pi.getBuilderId() != null && pi.getBuilderId() == unit.getID()) {
 					pi.setStatus(PlannedItemStatus.PLANNED);
 				}
 			}
@@ -146,6 +195,10 @@ public class Main extends DefaultBWListener {
 	@Override
 	public void onUnitComplete(Unit unit) {
 		if (unit.getPlayer() == self) {
+			//System.out.println("Type:" + unit.getType() + " WB:" + unit.getType().whatBuilds());
+			//System.out.println(unit.getType() + " completed");
+			unitIdsByType.putIfAbsent(unit.getType(), new HashSet<Integer>());
+			unitIdsByType.get(unit.getType()).add(unit.getID());
 			for (PlannedItem pi : plannedItems) {
 				if (pi.getStatus() == PlannedItemStatus.MORPHING) {
 
@@ -177,33 +230,32 @@ public class Main extends DefaultBWListener {
 	public void onUnitCreate(Unit unit) {
 		
 		if (unit.getPlayer() == self) {
+			unitIdsByType.putIfAbsent(unit.getType(), new HashSet<Integer>());
+			unitIdsByType.get(unit.getType()).add(unit.getID());
 			unitsById.put(unit.getID(), unit);
-			System.out.println(unit.getType() + " created, addded to unitsById");
-
 		}
 	}
-	
+
 	@Override
 	public void onFrame() {
+		// System.out.println(unitIdsByType);
 		frameCount++;
 		countAllUnits();
 		StringBuilder statusMessages = new StringBuilder();
 		statusMessages.append("Supply actual:" + supplyUsedActual + "\n");
-		availableMinerals = self.minerals()-reservedMinerals;
+		availableMinerals = self.minerals() - reservedMinerals;
 		availableGas = self.gas() - reservedGas;
-		
+
 		statusMessages.append("Available minerals:" + availableMinerals + "\n");
 		statusMessages.append("Available gas:" + availableGas + "\n");
-			
-		
+
 		Integer lastImportance = Integer.MIN_VALUE;
 		Boolean skip = false;
 		List<PlannedItem> doneItems = new ArrayList<PlannedItem>();
-		
+
 		for (PlannedItem pi : plannedItems) {
 			if (pi.getStatus() == PlannedItemStatus.PLANNED) {
 				if (!skip) {
-
 					Boolean prereqsOk = true;
 					for (PlannedItemPrereq pip : pi.getPrereqList()) {
 						if (pip.isMorphing()) {
@@ -221,35 +273,8 @@ public class Main extends DefaultBWListener {
 						if (availableMinerals >= pi.getUnitType().mineralPrice()
 								&& availableGas >= pi.getUnitType().gasPrice() && supplyUsedActual >= pi.getSupply()
 								&& prereqsOk) {
-							reservedMinerals += pi.getUnitType().mineralPrice();
-							reservedGas += pi.getUnitType().gasPrice();
-							availableMinerals = self.minerals() - reservedMinerals;
-							availableGas = self.gas() - reservedGas;
-							//System.out.println("Prereqs&resources are ok, reserving"); //TODO check larvability
-							if (pi.plannedItemType == PlannedItemType.BUILDING) {
-								for (Unit unit : self.getUnits()) {
-									if (unit.getType() == UnitType.Zerg_Drone && !unit.isMorphing()) {
-										TilePosition plannedPosition = getBuildTile(unit, pi.getUnitType(),
-												self.getStartLocation());
-										unit.build(pi.getUnitType(), plannedPosition);
-										pi.setPlannedPosition(plannedPosition);
-										pi.setBuilderId(unit.getID());
-										pi.setStatus(PlannedItemStatus.WORKER_ASSIGNED); // Dude got this
-										System.out.println(pi.getUnitType() + " : worker assigned" + pi.getStatus());
-										break; // This is important, one dude is enough!
-
-									}
-								}
-							} else if (pi.plannedItemType == PlannedItemType.UNIT ){
-								for (Unit unit : self.getUnits()) {
-								if (unit.getType() == UnitType.Zerg_Larva) {
-									pi.setUnitId(unit.getID());
-									unit.morph(pi.getUnitType());
-									System.out.println("Larva with id:" + unit.getID() + " selected to morph into " + pi.getUnitType());
-									break;
-								}
-								}
-							}
+							reserveResources(pi.getUnitType());
+							pi.setStatus(PlannedItemStatus.RESOURCES_RESERVED);
 
 						} else {
 							lastImportance = pi.getImportance();
@@ -258,19 +283,60 @@ public class Main extends DefaultBWListener {
 						skip = true;
 					}
 				}
+			} else if (pi.getStatus() == PlannedItemStatus.RESOURCES_RESERVED) {
+				if (pi.plannedItemType == PlannedItemType.BUILDING) {
+					Unit builder = getWorkerFromRole(WorkerRole.MINERAL);
+					if (builder != null) {
+						TilePosition plannedPosition = getBuildTile(builder, pi.getUnitType(), self.getStartLocation());
+						builder.build(pi.getUnitType(), plannedPosition);
+						pi.setPlannedPosition(plannedPosition);
+						pi.setBuilderId(builder.getID());
+						pi.setStatus(PlannedItemStatus.BUILDER_ASSIGNED);
+					}
+					break;
+				} else if (pi.plannedItemType == PlannedItemType.UNIT) {
+					if (unitIdsByType.get(UnitType.Zerg_Larva) != null
+							&& !unitIdsByType.get(UnitType.Zerg_Larva).isEmpty()) {
+						Integer larvaId = unitIdsByType.get(UnitType.Zerg_Larva).iterator().next();
+						Unit larva = unitsById.get(larvaId);
+						pi.setUnitId(larvaId);
+						pi.setStatus(PlannedItemStatus.BUILDER_ASSIGNED);
+						System.out.println("larva: " + larvaId + " assigned to morph into a beautiful "+ pi.getUnitType());
+						larva.morph(pi.getUnitType());
+						break;
+					}
+				}
+			}
+
+			else if (pi.getStatus() == PlannedItemStatus.MORPHING) {
+				if (pi.getDoCancel()) {
+					Boolean cancelPrereqsOk = true;
+					for (PlannedItemPrereq pip : pi.getCancelPrereqList()) {
+						if (pip.isMorphing()) {
+							if (!(unitsInProduction.getOrDefault(pip.getUnitType(), 0) >= pip.getAmount())) {
+								cancelPrereqsOk = false;
+								break;
+							}
+						} else if (!(unitCounts.getOrDefault(pip.getUnitType(), 0) >= pip.getAmount())) {
+							cancelPrereqsOk = false;
+							break;
+						}
+					}
+					if (cancelPrereqsOk) {
+						pi.setStatus(PlannedItemStatus.CANCEL);
+					}
+				}
 
 			} else if (pi.getStatus() == PlannedItemStatus.CANCEL) {
 				unitsById.get(pi.getUnitId()).cancelMorph();
 				pi.setStatus(PlannedItemStatus.DONE);
-							
-			} else  if (pi.getStatus() == PlannedItemStatus.DONE) {
-			 	doneItems.add(pi);
-		 }
+
+			} else if (pi.getStatus() == PlannedItemStatus.DONE) {
+				doneItems.add(pi);
+			}
 		}
-		
 		plannedItems.removeAll(doneItems);
-		
-		
+
 		for (Unit unit : self.getUnits()) {
 			if (unit.getType() == UnitType.Zerg_Drone) {
 				if (unit.isIdle()) {
@@ -288,18 +354,20 @@ public class Main extends DefaultBWListener {
 					if (closestMineral != null) {
 						unit.gather(closestMineral, false);
 					}
-				}			
+				}
 			}
-			
-			if (unit.getType() == UnitType.Zerg_Larva && self.minerals() >= 50) {
-			//	unit.morph(UnitType.Zerg_Drone);
-			}
-			game.drawTextMap(unit.getPosition(), Integer.toString(unit.getID()) + "," + unit.getType());
+
 		}
-		 game.drawTextScreen(10, 25, statusMessages.toString());      
-		 
-		
+		game.drawTextScreen(10, 25, statusMessages.toString());
 	}
+
+	public void reserveResources(UnitType unitType) {
+		reservedMinerals += unitType.mineralPrice();
+		reservedGas += unitType.gasPrice();
+		availableMinerals = self.minerals() - reservedMinerals;
+		availableGas = self.gas() - reservedGas;
+	}
+	
 
     public static void main(String[] args) {
         new Main().run();

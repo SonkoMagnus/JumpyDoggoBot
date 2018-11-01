@@ -25,7 +25,7 @@ public class PlannedItem {
 	private TilePosition plannedPosition;
 	
 	private List<PlannedItemPrereq> prereqList = new ArrayList<PlannedItemPrereq>();
-	private Boolean doCancel;
+	private Boolean doCancel = false;
 	private List<PlannedItemPrereq> cancelPrereqList = new ArrayList<PlannedItemPrereq>();
 	//unit, amount, morphing?
 
@@ -64,6 +64,16 @@ public class PlannedItem {
 		this.importance = importance;
 		this.status = status;
 	}
+	
+	public PlannedItem(PlannedItemType plannedItemType, UnitType unitType, Integer supply, Integer importance) {
+		super();
+		this.plannedItemType = plannedItemType;
+		this.unitType = unitType;
+		this.supply = supply;
+		this.importance = importance;
+		this.status = PlannedItemStatus.PLANNED;
+	}
+	
 	
 	public PlannedItem(PlannedItemType plannedItemType, UnitType unitType, Integer supply, Integer importance, PlannedItemStatus status, TilePosition plannedPosition) {
 		super();
