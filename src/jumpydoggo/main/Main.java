@@ -58,11 +58,9 @@ public class Main extends DefaultBWListener {
     }
     
     public Unit getWorkerFromRole(WorkerRole role) { 
-    	System.out.println(workerIdsByRole);
     	if (workerIdsByRole.get(role).isEmpty()) {
     		return null;
     	} else {
-    		System.out.println("blep");
     		Integer size = workerIdsByRole.get(role).size();
     		return unitsById.get(workerIdsByRole.get(role).get(rand.nextInt(size)));
     	}
@@ -76,25 +74,15 @@ public class Main extends DefaultBWListener {
 		game.setLocalSpeed(30);
 		game.enableFlag(1);
 
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
-		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1));
-		PlannedItemPrereq pip1 = new PlannedItemPrereq(UnitType.Zerg_Drone, 9, false);
-		PlannedItemPrereq cancelReq = new PlannedItemPrereq(UnitType.Zerg_Drone, 1, true);
-		PlannedItem trickExt = new PlannedItem(PlannedItemType.BUILDING, UnitType.Zerg_Extractor, 16, 1 );
+		plannedItems.add(new PlannedItem(PlannedItemType.BUILDING, UnitType.Zerg_Spawning_Pool, 0, 1));
+		PlannedItem dr1 = new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 0, 1);
+		PlannedItemPrereq pip1 = new PlannedItemPrereq(UnitType.Zerg_Spawning_Pool, 1, true);
+		dr1.getPrereqList().add(pip1);
+		plannedItems.add(dr1);
 		
-		PlannedItem overDrone = new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Drone, 16, 1);
-		PlannedItemPrereq pipEx = new PlannedItemPrereq(UnitType.Zerg_Extractor, 1, true);
-		overDrone.getPrereqList().add(pipEx);
-		
-		trickExt.getPrereqList().add(pip1);
-		trickExt.setDoCancel(true);
-		trickExt.getCancelPrereqList().add(cancelReq);
-		plannedItems.add(trickExt);
-		plannedItems.add(overDrone);
-		
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Zergling, 8, 1));
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Zergling, 10, 1));
+		plannedItems.add(new PlannedItem(PlannedItemType.UNIT, UnitType.Zerg_Zergling, 12, 1));
 		for (WorkerRole wr : WorkerRole.values()) {
 			workerIdsByRole.put(wr, new ArrayList<Integer>());
 		}
@@ -155,7 +143,6 @@ public class Main extends DefaultBWListener {
 				reservedGas -= pi.getUnitType().gasPrice();
 				pi.setStatus(PlannedItemStatus.MORPHING);
 				pi.setUnitId(unit.getID());
-				System.out.println("Setting unit: " + pi.getUnitType() + " ID:" + unit.getID() +" to MORPHING");
 			}
 		}
 		
@@ -195,8 +182,6 @@ public class Main extends DefaultBWListener {
 	@Override
 	public void onUnitComplete(Unit unit) {
 		if (unit.getPlayer() == self) {
-			//System.out.println("Type:" + unit.getType() + " WB:" + unit.getType().whatBuilds());
-			//System.out.println(unit.getType() + " completed");
 			unitIdsByType.putIfAbsent(unit.getType(), new HashSet<Integer>());
 			unitIdsByType.get(unit.getType()).add(unit.getID());
 			for (PlannedItem pi : plannedItems) {
@@ -214,7 +199,6 @@ public class Main extends DefaultBWListener {
 					} else if (pi.plannedItemType == PlannedItemType.UNIT) {
 						if (unit.getID() == pi.getUnitId()) {
 							pi.setStatus(PlannedItemStatus.DONE);
-							System.out.println("Setting unit: " + pi.getUnitType() + " to DONE");
 						}
 					}
 				}
@@ -238,7 +222,6 @@ public class Main extends DefaultBWListener {
 
 	@Override
 	public void onFrame() {
-		// System.out.println(unitIdsByType);
 		frameCount++;
 		countAllUnits();
 		StringBuilder statusMessages = new StringBuilder();
@@ -268,14 +251,13 @@ public class Main extends DefaultBWListener {
 							break;
 						}
 					}
-
 					if (pi.getImportance() >= lastImportance) {
 						if (availableMinerals >= pi.getUnitType().mineralPrice()
 								&& availableGas >= pi.getUnitType().gasPrice() && supplyUsedActual >= pi.getSupply()
-								&& prereqsOk) {
+								&& prereqsOk && self.hasUnitTypeRequirement(pi.getUnitType())) {
+							//Unit requirement logic doesn't actually work
 							reserveResources(pi.getUnitType());
 							pi.setStatus(PlannedItemStatus.RESOURCES_RESERVED);
-
 						} else {
 							lastImportance = pi.getImportance();
 						}
@@ -301,7 +283,6 @@ public class Main extends DefaultBWListener {
 						Unit larva = unitsById.get(larvaId);
 						pi.setUnitId(larvaId);
 						pi.setStatus(PlannedItemStatus.BUILDER_ASSIGNED);
-						System.out.println("larva: " + larvaId + " assigned to morph into a beautiful "+ pi.getUnitType());
 						larva.morph(pi.getUnitType());
 						break;
 					}
