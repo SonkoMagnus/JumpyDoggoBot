@@ -3,6 +3,10 @@ package jumpydoggo.main;
 import bwem.Map;
 import jumpydoggo.main.PlannedItem.PlannedItemType;
 import jumpydoggo.main.manager.UnitManager;
+import jumpydoggo.main.manager.ZerglingManager;
+import jumpydoggo.main.map.EnemyBuildingInfo;
+import jumpydoggo.main.map.TileInfo;
+import jumpydoggo.main.map.TileInfoComparator;
 import org.openbw.bwapi4j.BW;
 import org.openbw.bwapi4j.BWEventListener;
 import org.openbw.bwapi4j.Player;
@@ -12,12 +16,12 @@ import org.openbw.bwapi4j.type.UnitType;
 import org.openbw.bwapi4j.unit.Unit;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Random;
-
 
 
 public class Main implements BWEventListener {
@@ -56,9 +60,9 @@ public class Main implements BWEventListener {
 
 	Random rand = new Random();
 
-	public HashMap<Integer, TilePosition> enemyBuildingMemory = new HashMap<>();
+	public HashMap<Integer, EnemyBuildingInfo> enemyBuildingMemory = new HashMap<>();
 
-	private BW bw;
+	public static BW bw;
 
 	public Unit getWorkerFromRole(WorkerRole role) {
 		if (workerIdsByRole.get(role).isEmpty()) {
@@ -87,14 +91,14 @@ public class Main implements BWEventListener {
 
 	Map map = new Map();
 
+	public static ArrayList<TileInfo> scoutHeatMap = new ArrayList<>();
+	public static HashSet<TilePosition> scoutTargets = new HashSet<>();
+
 	@Override
 	public void onStart() {
 		self = bw.getInteractionHandler().self();
 		bw.getInteractionHandler().setLocalSpeed(30);
 		bw.getInteractionHandler().enableUserInput();
-
-
-
 
 		map.Initialize(bw);
 
@@ -116,6 +120,43 @@ public class Main implements BWEventListener {
 			workerIdsByRole.put(wr, new HashSet<>());
 		}
 
+		scoutHeatMap = new  ArrayList<TileInfo>();
+		//Build heatmap
+		for (int i=0; i< bw.getBWMap().mapWidth(); i++) {
+			for (int j = 0; j < bw.getBWMap().mapHeight(); j++) {
+				TileInfo ti;
+				TilePosition tp = new TilePosition(i,j);
+				if (map.StartingLocations().contains(tp)) {
+					ti = new TileInfo(tp, bw.isWalkable(tp.toWalkPosition()), TileInfo.TileType.BASELOCATION);
+				} else {
+					ti = new TileInfo(tp, bw.isWalkable(tp.toWalkPosition()), TileInfo.TileType.NORMAL);
+				}
+				scoutHeatMap.add(ti);
+			}
+		}
+
+	}
+
+	public void ageHeatMap() {
+		int weight = 1;
+		for (TileInfo ti : scoutHeatMap) {
+			int i = ti.getImportance();
+			if (bw.isVisible(ti.getTile())) {
+				ti.setImportance(0);
+				scoutTargets.remove(ti.getTile());
+			} else {
+				if (ti.getTileType() == TileInfo.TileType.BASELOCATION) {
+					weight = 3;
+				} else if (ti.getTileType() == TileInfo.TileType.NATURAL) {
+					weight = 2;
+				} else if (ti.getTileType() == TileInfo.TileType.NORMAL) {
+					weight = 1;
+				}
+				ti.setImportance(ti.getImportance()+weight);
+			}
+		}
+		Collections.sort(scoutHeatMap, new TileInfoComparator());
+
 	}
 
 	@Override
@@ -126,6 +167,23 @@ public class Main implements BWEventListener {
 	@Override
 	public void onFrame() {
 		frameCount++;
+		ageHeatMap();
+		if (!enemyBuildingMemory.isEmpty()) {
+
+			for (Integer i : unitIdsByType.get(UnitType.Zerg_Zergling)) {
+				Position targetPos = enemyBuildingMemory.values().iterator().next().getTilePosition().toPosition();
+				((ZerglingManager)unitManagerMap.get(i)).setTargetPosition(targetPos);
+				((ZerglingManager)unitManagerMap.get(i)).setRole(ZerglingManager.Role.FIGHT);
+			}
+		}
+		//System.out.println(scoutTargets);
+/*
+		for (TileInfo ti : scoutHeatMap) {
+			bw.getMapDrawer().drawTextMap(ti.getTile().toPosition(), String.valueOf(ti.getImportance()));
+
+		}
+*/
+
 		countAllUnits();
 		StringBuilder statusMessages = new StringBuilder();
 		statusMessages.append("Supply actual:" + supplyUsedActual + "\n");
@@ -139,7 +197,9 @@ public class Main implements BWEventListener {
 		Boolean skip = false;
 		List<PlannedItem> doneItems = new ArrayList<PlannedItem>();
 
-
+		for (UnitManager um : unitManagerMap.values()) {
+			um.execute();
+		}
 
 		for (PlannedItem pi : plannedItems) {
 			if (pi.getStatus() == PlannedItemStatus.PLANNED) {
@@ -249,8 +309,8 @@ public class Main implements BWEventListener {
 
 		}
 
-
 		bw.getMapDrawer().drawTextScreen(10, 25, statusMessages.toString());
+
 
 	}
 
@@ -285,7 +345,23 @@ public class Main implements BWEventListener {
 	}
 
 	@Override
-	public void onUnitShow(Unit unit) {
+	public void onUnitShow(Unit unit) { //TODO refresh type of enemybuilding (morph)
+		if (unit.getPlayer() == self) {
+
+		} else {
+			//Enemy
+			if (!unit.getType().isNeutral()) {
+				if (unit.getType().isBuilding()) {
+					if (enemyBuildingMemory.containsKey(unit.getID())) {
+						if (!enemyBuildingMemory.get(unit.getID()).equals(unit.getTilePosition())) {
+							enemyBuildingMemory.get(unit.getID()).setTilePosition(unit.getTilePosition());
+						}
+					} else {
+						enemyBuildingMemory.put((Integer) unit.getID(), new EnemyBuildingInfo(unit.getType(), unit.getTilePosition()));
+					}
+				}
+			}
+		}
 
 	}
 
@@ -306,6 +382,11 @@ public class Main implements BWEventListener {
 				larvasEver.add(unit.getID());
 				availableLarvaIds.add(unit.getID());
 
+			}
+			if (unit.getType().equals(UnitType.Zerg_Zergling)) {
+				ZerglingManager zm = new ZerglingManager(unit);
+				zm.setRole(ZerglingManager.Role.SCOUT);
+				unitManagerMap.put(unit.getID(), zm);
 			}
 		}
 
@@ -328,6 +409,18 @@ public class Main implements BWEventListener {
 						list.remove(unit.getID());
 						break;
 					}
+				}
+			}
+			if (unitManagerMap.keySet().contains(unit.getID())) {
+				unitManagerMap.get(unit.getID()).dieded();
+			}
+
+			unitManagerMap.remove(unit.getID());
+
+		} else {
+			if (!unit.getType().isNeutral()) {
+				if (unit.getType().isBuilding()) {
+					enemyBuildingMemory.remove(unit.getID());
 				}
 			}
 		}
@@ -356,7 +449,7 @@ public class Main implements BWEventListener {
 			}
 
 			unitIdsByType.putIfAbsent(unit.getType(), new HashSet<Integer>());
-			unitIdsByType.get(unit.getType()).add(unit.getID());
+				unitIdsByType.get(unit.getType()).add(unit.getID());
 			for (PlannedItem pi : plannedItems) {
 				if (pi.plannedItemType == PlannedItemType.BUILDING) {
 					if (pi.getUnitType() == unit.getType() && pi.getStatus() == PlannedItemStatus.CREATOR_ASSIGNED) {
@@ -380,10 +473,17 @@ public class Main implements BWEventListener {
 					break;
 				}
 			}
+			//Assign managers
+			if (unit.getType() == UnitType.Zerg_Zergling) {
+				ZerglingManager zm = new ZerglingManager(unit);
+				zm.setRole(ZerglingManager.Role.SCOUT);
+				unitManagerMap.put(unit.getID(), zm);
+			}
+
+
+
+
 		}  else if (!unit.getType().isNeutral()) {
-		if (unit.getType().isBuilding()) {
-			enemyBuildingMemory.put((Integer)unit.getID(), unit.getTilePosition());
-		}
 	}
 
 	}
