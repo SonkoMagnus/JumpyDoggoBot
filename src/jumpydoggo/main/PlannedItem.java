@@ -10,6 +10,14 @@ import java.util.List;
 
 public class PlannedItem {
 
+    public Boolean getReserveOnFullSupply() {
+        return reserveOnFullSupply;
+    }
+
+    public void setReserveOnFullSupply(Boolean reserveOnFullSupply) {
+        this.reserveOnFullSupply = reserveOnFullSupply;
+    }
+
     public enum PlannedItemType {
         BUILDING, UNIT, TECH, UPGRADE
     }
@@ -23,6 +31,7 @@ public class PlannedItem {
     private Integer builderId;
     private Integer unitId;
     private TilePosition plannedPosition;
+    private Boolean reserveOnFullSupply = false;
 
     private List<PlannedItemPrereq> prereqList = new ArrayList<PlannedItemPrereq>();
     private Boolean doCancel = false;
