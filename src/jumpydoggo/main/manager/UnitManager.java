@@ -33,7 +33,7 @@ public class UnitManager {
                 if (avoidthreats) {
                     //THis just ensures that the unit don't pick it as target.
                     WalkPosition scTile = ti.getTile().toWalkPosition();
-                    if (Main.threatMemoryMap.containsKey(ti.getTile().toWalkPosition()) || Main.activeThreatMapArray[scTile.getX()][scTile.getY()] != null) {
+                    if (Main.threatMemoryMapArray[scTile.getX()][scTile.getY()] != null || Main.activeThreatMapArray[scTile.getX()][scTile.getY()] != null) {
                         avoidTile = true;
                     }
                 }

@@ -70,8 +70,8 @@ public class Main implements BWEventListener {
 
 
 	//Threat maps
-	//public static HashMap<WalkPosition, ThreatPosition> activeThreatMap = new HashMap<>();
-	public static HashMap<WalkPosition, ThreatPosition> threatMemoryMap = new HashMap<>();
+
+	public static ThreatPosition[][] threatMemoryMapArray;
 	public static ThreatPosition[][] activeThreatMapArray;
 	public HashMap<Integer, Set<WalkPosition>> threatenedWPsByIDs = new HashMap<>();
 	public HashMap<Position, Integer> threatUnitPositions = new HashMap<>();
@@ -103,8 +103,9 @@ public class Main implements BWEventListener {
 	public HashMap<Integer, EnemyBuildingInfo> enemyBuildingMemory = new HashMap<>();
 
 	public static int[][] occupiedGroundArray;
-
 	public static int[][] areaDataArray;
+
+	public HashMap<Integer, int[][]> coordinatesByAreaIds;
 
 
 	public static BW bw;
@@ -148,6 +149,7 @@ public class Main implements BWEventListener {
 	@Override
 	public void onStart() {
 		activeThreatMapArray = new ThreatPosition[bw.getBWMap().mapWidth()*4][bw.getBWMap().mapHeight()*4];
+		threatMemoryMapArray = new ThreatPosition[bw.getBWMap().mapWidth()*4][bw.getBWMap().mapHeight()*4];
 
 		occupiedGroundArray = new int[bw.getBWMap().mapWidth()*4][bw.getBWMap().mapHeight()*4];
 		for (int x=0; x<occupiedGroundArray.length; x++ ) {
@@ -204,13 +206,15 @@ public class Main implements BWEventListener {
 			}
 		}
 
+		for (WorkerRole wr : WorkerRole.values()) {
+			workerIdsByRole.put(wr, new HashSet<>());
+		}
+
 		//Sectio debugiensis
 		MapFileWriter.saveAreaDataArray();
 
 
-		for (WorkerRole wr : WorkerRole.values()) {
-			workerIdsByRole.put(wr, new HashSet<>());
-		}
+
 
 		scoutHeatMap = new  ArrayList<TileInfo>();
 		//Build heatmap
@@ -279,6 +283,47 @@ public class Main implements BWEventListener {
 	TreeSet<WalkPosition> airwps = new TreeSet<>();
 	TreeSet<WalkPosition> groundwps = new TreeSet<>();
 
+	public void addToThreatMemoryArray(Unit unit) {
+		if (unit.getGroundWeapon() != null && !(unit.getGroundWeapon().type() == WeaponType.None)) {
+			int hrange = unitStatCalculator.weaponMaxRange(unit.getType().groundWeapon());
+			groundwps = Cartography.getWalkPositionsInRange(unit, hrange);
+		}
+
+		if (unit.getAirWeapon() != null && !(unit.getAirWeapon().type() == WeaponType.None)) {
+			int hrange = unitStatCalculator.weaponMaxRange(unit.getType().airWeapon());
+			airwps = Cartography.getWalkPositionsInRange(unit, hrange);
+		}
+
+		for (WalkPosition wp : groundwps) {
+			ThreatPosition threatPosition;
+			if (threatMemoryMapArray[wp.getX()][wp.getY()] != null) {
+				threatPosition = threatMemoryMapArray[wp.getX()][wp.getY()];
+			} else {
+				threatPosition = new ThreatPosition();
+			}
+			//ThreatPosition threatPosition = threatMemoryMap.getOrDefault(wp, new ThreatPosition());
+			threatPosition.getGroundThreats().putIfAbsent(unit.getID(), unit.getGroundWeapon());
+			threatPosition.getThreatTime().put(unit.getID(), frameCount);
+			threatMemoryMapArray[wp.getX()][wp.getY()] = threatPosition;
+		}
+
+		for (WalkPosition wp : airwps) {
+			ThreatPosition threatPosition;
+			if (threatMemoryMapArray[wp.getX()][wp.getY()] != null) {
+				threatPosition = threatMemoryMapArray[wp.getX()][wp.getY()];
+			} else {
+				threatPosition = new ThreatPosition();
+			}
+			threatPosition.getAirThreats().putIfAbsent(unit.getID(), unit.getAirWeapon());
+			threatPosition.getThreatTime().putIfAbsent(unit.getID(), frameCount);
+			threatMemoryMapArray[wp.getX()][wp.getY()] = threatPosition;
+		}
+
+		TreeSet<WalkPosition> allWps = groundwps;
+		allWps.addAll(airwps);
+		threatenedWPsByIDs.put(unit.getID(), allWps);
+	}
+/*
 	//On unit hide
 	public void addToThreatMemory(Unit unit) {
 		if (unit.getGroundWeapon() != null && !(unit.getGroundWeapon().type() == WeaponType.None)) {
@@ -310,8 +355,10 @@ public class Main implements BWEventListener {
 		allWps.addAll(airwps);
 		threatenedWPsByIDs.put(unit.getID(), allWps);
 	}
+	*/
 
 	//On: show, destroy, morph (if visible..)
+	/*
 	public void removeFromThreatMemory(Integer unitID) {
 		if (threatenedWPsByIDs.containsKey(unitID)) {
 			for (WalkPosition wp : threatenedWPsByIDs.get(unitID)) {
@@ -328,7 +375,26 @@ public class Main implements BWEventListener {
 			}
 			threatenedWPsByIDs.remove(unitID);
 		}
+}
+*/
+	public void removeFromThreatMemoryArray(Integer unitID) {
+		if (threatenedWPsByIDs.containsKey(unitID)) {
+			for (WalkPosition wp : threatenedWPsByIDs.get(unitID)) {
+				if (threatMemoryMapArray[wp.getX()][wp.getY()] != null) {
+					ThreatPosition tp = threatMemoryMapArray[wp.getX()][wp.getY()];
+					tp.getGroundThreats().remove(unitID);
+					tp.getAirThreats().remove(unitID);
+					tp.getThreatTime().remove(unitID);
+
+					if (tp.getGroundThreats().isEmpty() && tp.getAirThreats().isEmpty()) {
+						threatMemoryMapArray[wp.getX()][wp.getY()] = null;
+					}
+				}
+			}
+			threatenedWPsByIDs.remove(unitID);
+		}
 	}
+
 /*
 	public void maintainActiveThreatMap() {
 		activeThreatMap = new HashMap<>();
@@ -416,7 +482,7 @@ public class Main implements BWEventListener {
 		for (Position p :threatUnitPositions.keySet()) {
 			if (bw.getBWMap().isVisible(p.getX(), p.getY())) {
 				System.out.println("Position visible");
-				removeFromThreatMemory(threatUnitPositions.get(p));
+				removeFromThreatMemoryArray(threatUnitPositions.get(p));
 			}
 		}
 	}
@@ -442,8 +508,6 @@ public class Main implements BWEventListener {
 				}
 			}
 		}
-
-
 
 
 		WalkPosition wp1 = new WalkPosition(1,1);
@@ -489,19 +553,19 @@ public class Main implements BWEventListener {
 		for (WalkPosition x : borks) {
 			ThreatPosition tp = new ThreatPosition();
 			tp.getGroundThreats().put(1, new Weapon(WeaponType.Arclite_Cannon, 3));
-			threatMemoryMap.put(x, tp);
+			threatMemoryMapArray[x.getX()][x.getY()] = tp;
 		}
 		ThreatPosition tp = new ThreatPosition();
 		tp.getGroundThreats().put(1, new Weapon(WeaponType.Arclite_Cannon, 3));
-		threatMemoryMap.put(bork, tp);
+		threatMemoryMapArray[dest.getX()][dest.getY()] = tp;
+
+
 		borks.add(bork);
 
 		Cartography.drawWalkPositionGrid(borks, Color.RED);
 
-
-
-		threatMemoryMap.remove(origin);
-		threatMemoryMap.remove(dest);
+		threatMemoryMapArray[origin.getX()][origin.getY()] = null;
+		//threatMemoryMapArray[dest.getX()][dest.getY()] = null;
 
 		debugwps.add(origin);
 		debugwps.add(dest);
@@ -512,28 +576,20 @@ public class Main implements BWEventListener {
 		WalkPosition herp = new WalkPosition(51,72);
 
 		Area area = Main.bwem.getMap().getArea(herp);
-		//(ChokePoint cp1, ChokePoint cp2, boolean useActiveThreatMap, boolean useThreatMemory) {
-		//patherino = Cartography.findAnyPathInArea(herp, Collections.singletonList(herp), true, true, true, 1);
 
-		//patherino = Cartography.find(origin, dest, false, true, true);
-/*
-		Collections.singletonList(herp);
-			Cartography.pathExistsFloodFillArray(origin,dest, true,true, true);
-*/
-	//	System.out.println(	Cartography.pathExistsFloodFillAllDir(origin,dest, true,true, true));
+		CPPath bwempath = bwem.getMap().getPath(origin.toPosition(), dest.toPosition());
+		ChokePoint coppo = bwempath.get(bwempath.size() - 1);
+		for (WalkPosition wp : coppo.getGeometry()) {
+			ThreatPosition tpx = new ThreatPosition();
+			tpx.getGroundThreats().put(1, new Weapon(WeaponType.Arclite_Cannon, 3));
+			threatMemoryMapArray[wp.getX()][wp.getY()] = tpx;
+		}
 
-		//patherino=Cartography.findAnyPathInArea(cp1, cp2, true, true);
 
-		//for (int i =0; i<10; i++) {
+		for (int i =0; i<10; i++) {
 			patherino = Cartography.findAnyPathMultiAreaContinuous(origin, dest, true, true, true);
-			;
-			Cartography.findAnyPathMultiAreaContinuous(new WalkPosition(349, 447), dest, true, true, true);
-			System.out.println("psize:" + patherino.size());
-		//}
 
-	//	System.out.println(patherino.size());
-
-		//Cartography.drawWalkPositionGrid(activeThreatMap.keySet(), Color.CYAN);
+		}
 
 		Cartography.drawWalkPositionGrid(patherino, Color.GREEN);
 		Cartography.drawWalkPositionGrid(Collections.singletonList(origin), Color.CYAN);
@@ -747,7 +803,7 @@ public class Main implements BWEventListener {
 		} else {
 			if (!unit.getType().isNeutral()) {
 				//Enemy
-				removeFromThreatMemory(unit.getID());
+				removeFromThreatMemoryArray(unit.getID());
 				if (unit.getType().isBuilding()) {
 					if (enemyBuildingMemory.containsKey(unit.getID())) {
 						if (!enemyBuildingMemory.get(unit.getID()).equals(unit.getTilePosition())) {
@@ -769,7 +825,7 @@ public class Main implements BWEventListener {
 	public void onUnitHide(Unit unit) {
 		if (unit.getPlayer() != self && !unit.getType().isNeutral()) {
 			System.out.println("Unit hidden:" + unit.getID() + "type:" + unit.getType());
-			addToThreatMemory(unit);
+			addToThreatMemoryArray(unit);
 			enemyUnits.remove(unit);
 			if (!unit.getType().isBuilding()) {
 				if (enemyUnitMemory.containsKey(unit.getID())) {
@@ -833,7 +889,7 @@ public class Main implements BWEventListener {
 
 		} else {
 			if (!unit.getType().isNeutral()) {
-				removeFromThreatMemory(unit.getID());
+				removeFromThreatMemoryArray(unit.getID());
 				if (unit.getType().isBuilding()) {
 					enemyBuildingMemory.remove(unit.getID());
 				} else {

@@ -12,6 +12,7 @@ import org.openbw.bwapi4j.unit.Unit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.PriorityQueue;
@@ -29,7 +30,6 @@ public class Cartography {
     public static HashMap<Direction, HashSet<Direction>> diagCheckPos;
 
     static {
-
         straightCheckPos = new HashMap<>();
         HashSet<Direction> dirs = new HashSet<>();
         dirs.add(Direction.W);
@@ -112,14 +112,7 @@ public class Cartography {
         }
         return false;
     }
-/*
-    public static boolean isWalkPositionOnTheMap(WalkPosition wp, BW bw) {
-        if (wp.getX() < 0 || wp.getX() >= bw.getBWMap().mapWidth()*4 || wp.getY() < 0 || wp.getY() >= bw.getBWMap().mapHeight()*4) {
-            return false;
-        }
-        return true;
-    }
-*/
+
     public static Set<WalkPosition> getOccupiedWalkPositionsOfUnit(Unit unit) {
         int leftWpPos = unit.getLeft() / 8;
         int rightWpPos = unit.getRight() / 8;
@@ -467,25 +460,28 @@ public class Cartography {
 
         return false; // Doesn't fall in any of the above cases
     }
-/*
-    public static boolean isUnderThreat(boolean ground, WalkPosition wp, boolean useActiveThreatMap, boolean useThreatMemory) {
+
+    public static boolean isCoordsUnderThreat(boolean ground, int x, int y, boolean useActiveThreatMap, boolean useThreatMemory) {
         boolean underThreat = false;
+        if (isWalkPositionOnTheMap(x, y)) {
+            if (ground) {
+                if ((useActiveThreatMap && Main.activeThreatMapArray[x][y] != null)) {
+                    if (!Main.activeThreatMapArray[x][y].getGroundThreats().isEmpty()) {
+                        underThreat = true;
+                    }
+                }
 
-        if ((useActiveThreatMap && Main.activeThreatMap.containsKey(wp))) {
-            if (!Main.activeThreatMap.get(wp).getGroundThreats().isEmpty()) {
-                underThreat = true;
-            }
-        }
-
-        if ((useThreatMemory && Main.threatMemoryMap.containsKey(wp))) {
-            if (!Main.threatMemoryMap.get(wp).getGroundThreats().isEmpty()) {
-                underThreat = true;
+                if ((useThreatMemory && Main.threatMemoryMapArray[x][y] != null)) {
+                    if (!Main.threatMemoryMapArray[x][y].getGroundThreats().isEmpty()) {
+                        underThreat = true;
+                    }
+                }
             }
         }
 
         return underThreat;
     }
-*/
+
     public static boolean isUnderThreat(boolean ground, WalkPosition wp, boolean useActiveThreatMap, boolean useThreatMemory) {
         boolean underThreat = false;
         if (isWalkPositionOnTheMap(wp.getX(), wp.getY())) {
@@ -496,8 +492,8 @@ public class Cartography {
                     }
                 }
 
-                if ((useThreatMemory && Main.threatMemoryMap.containsKey(wp))) {
-                    if (!Main.threatMemoryMap.get(wp).getGroundThreats().isEmpty()) {
+                if ((useThreatMemory && Main.threatMemoryMapArray[wp.getX()][wp.getY()] != null)) {
+                    if (!Main.threatMemoryMapArray[wp.getX()][wp.getY()].getGroundThreats().isEmpty()) {
                         underThreat = true;
                     }
                 }
@@ -506,6 +502,8 @@ public class Cartography {
 
         return underThreat;
     }
+
+
 
     public static boolean isAdjacent(WalkPosition wp1, WalkPosition wp2) {
         if (Math.abs(wp1.getX() - wp2.getX()) <= 1 && Math.abs(wp1.getY() - wp2.getY()) <= 1) {
@@ -517,7 +515,7 @@ public class Cartography {
 
     //Only non-diagonal adjacency
     public static boolean isAdjacentStrict(WalkPosition wp1, WalkPosition wp2) {
-        if (wp1.getX() == wp2.getX() || wp1.getY() == wp2.getY()) {
+        if (Math.abs(wp1.getX() - wp2.getX()) <= 1 ^ Math.abs(wp1.getY() - wp2.getY()) <= 1) {
             return true;
         }
         return false;
@@ -1136,6 +1134,38 @@ public class Cartography {
         return null;
     }
 
+    public static void transformCoordsToDir(int x, int y, Direction dir) {
+        if (dir.equals(Direction.N)) {
+            y--;
+        }
+        if (dir.equals(Direction.S)) {
+            y++;
+        }
+        if (dir.equals(Direction.W)) {
+            x--;
+        }
+        if (dir.equals(Direction.E)) {
+            x++;
+        }
+        if (dir.equals(Direction.NW)) {
+            x--;
+            y--;
+        }
+        if (dir.equals(Direction.NE)) {
+            x++;
+            y--;
+        }
+        if (dir.equals(Direction.SW)) {
+            x--;
+            y++;
+        }
+
+        if (dir.equals(Direction.SE)) {
+            x++;
+            y++;
+        }
+    }
+
     public static boolean isWalkPositionOnTheMap(int x, int y) {
         if (0 <= x
                 && x < Main.bw.getBWMap().mapWidth()*4
@@ -1145,277 +1175,6 @@ public class Cartography {
         }
         return false;
     }
-/*
-    public static boolean pathExistsFloodFillArray(WalkPosition start, WalkPosition end, boolean ground, boolean useActiveThreatMap, boolean useThreatMemory) {
-        //Clearing out the threat array
-        for (int x = 0; x < Main.threatArray.length; x++) {
-            for (int y = 0; y < Main.threatArray[x].length; y++) {
-                Main.threatArray[x][y] = 0;
-            }
-        }
-
-        //Setting threatened positions to 1
-        if (useActiveThreatMap) {
-            for (WalkPosition wp : Main.activeThreatMap.keySet()) {
-                Main.threatArray[wp.getX()][wp.getY()] = 1;
-            }
-        }
-
-        if (useThreatMemory) {
-            for (WalkPosition wp : Main.threatMemoryMap.keySet()) {
-                Main.threatArray[wp.getX()][wp.getY()] = 1;
-            }
-        }
-
-        ArrayList<WalkPosition> unchecked = new ArrayList<>();
-
-        if ((isUnderThreat(ground, start, useActiveThreatMap, useThreatMemory) || !Main.bw.getBWMap().isValidPosition(start))) {
-            return false;
-        } else {
-            Main.threatArray[start.getX()][start.getY()] = 1;
-            unchecked.add(start);
-        }
-
-        while (!unchecked.isEmpty()) {
-            ArrayList<WalkPosition> newWps = new ArrayList<>();
-            for (WalkPosition uc : unchecked) {
-                if (uc.equals(end)) {
-                    return true;
-                }
-                int x = uc.getX();
-                int y = uc.getY();
-
-                x = uc.getX() + 1;
-                y = uc.getY();
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                    if (end.getX() == x && end.getY() == y) {
-                        return true;
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-
-                x = uc.getX() - 1;
-                y = uc.getY();
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                    if (end.getX() == x && end.getY() == y) {
-                        return true;
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-
-                x = uc.getX();
-                y = uc.getY() - 1;
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                    if (end.getX() == x && end.getY() == y) {
-                        return true;
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-
-                x = uc.getX();
-                y = uc.getY() + 1;
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                    if (end.getX() == x && end.getY() == y) {
-                        return true;
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-            }
-            unchecked = newWps;
-        }
-        return false;
-    }
-
-
-    //Just returns a true/false for the path's existence
-    public static boolean pathExistsFloodFillArray(WalkPosition start, Collection<WalkPosition> endPoints, boolean ground, boolean useActiveThreatMap, boolean useThreatMemory) {
-        //Clearing out the threat array
-        for (int x = 0; x < Main.threatArray.length; x++) {
-            for (int y = 0; y < Main.threatArray[x].length; y++) {
-                Main.threatArray[x][y] = 0;
-            }
-        }
-
-        //Setting threatened positions to 1
-        if (useActiveThreatMap) {
-            for (WalkPosition wp : Main.activeThreatMap.keySet()) {
-                Main.threatArray[wp.getX()][wp.getY()] = 1;
-            }
-        }
-
-        if (useThreatMemory) {
-            for (WalkPosition wp : Main.threatMemoryMap.keySet()) {
-                Main.threatArray[wp.getX()][wp.getY()] = 1;
-            }
-        }
-
-        ArrayList<WalkPosition> unchecked = new ArrayList<>();
-
-        if ((isUnderThreat(ground, start, useActiveThreatMap, useThreatMemory) || !Main.bw.getBWMap().isValidPosition(start))) {
-            return false;
-        } else {
-            Main.threatArray[start.getX()][start.getY()] = 1;
-            unchecked.add(start);
-        }
-
-        while (!unchecked.isEmpty()) {
-            ArrayList<WalkPosition> newWps = new ArrayList<>();
-            for (WalkPosition uc : unchecked) {
-                if (endPoints.contains(uc)) {
-                    return true;
-                }
-                int x = uc.getX();
-                int y = uc.getY();
-
-                x = uc.getX() + 1;
-                y = uc.getY();
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                    for (WalkPosition end : endPoints) {
-                        if (end.getX() == x && end.getY() == y) {
-                            return true;
-                        }
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-
-                x = uc.getX() - 1;
-                y = uc.getY();
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                    for (WalkPosition end : endPoints) {
-                        if (end.getX() == x && end.getY() == y) {
-                            return true;
-                        }
-                        Main.threatArray[x][y] = 1;
-                        newWps.add(new WalkPosition(x, y));
-                    }
-                }
-
-                    x = uc.getX();
-                    y = uc.getY() - 1;
-                    if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                        for (WalkPosition end : endPoints) {
-                            if (end.getX() == x && end.getY() == y) {
-                                return true;
-                            }
-                        }
-                        Main.threatArray[x][y] = 1;
-                        newWps.add(new WalkPosition(x, y));
-                    }
-
-                    x = uc.getX();
-                    y = uc.getY() + 1;
-                    if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0) {
-                        for (WalkPosition end : endPoints) {
-
-                            if (end.getX() == x && end.getY() == y) {
-                                return true;
-                            }
-                        }
-                        Main.threatArray[x][y] = 1;
-                        newWps.add(new WalkPosition(x, y));
-                    }
-                }
-                unchecked = newWps;
-            }
-            return false;
-    }
-
-
-    //Returns the first endpoint where there is a path to
-    public static WalkPosition pathExistsInArea(WalkPosition start, Collection<WalkPosition> endPoints, boolean ground, boolean useActiveThreatMap, boolean useThreatMemory, int areaId) {
-        //int areaId = area.getId().intValue();
-        //Clearing out the threat array
-        ArrayList<WalkPosition> path = new ArrayList<>();
-        for (int x = 0; x < Main.threatArray.length; x++) {
-            for (int y = 0; y < Main.threatArray[x].length; y++) {
-                if (Main.areaDataArray[x][y] != -1) {
-                    Main.threatArray[x][y] = 0;
-                }
-            }
-        }
-        //Setting threatened positions to 1
-        if (useActiveThreatMap) {
-            for (WalkPosition wp : Main.activeThreatMap.keySet()) {
-                Main.threatArray[wp.getX()][wp.getY()] = 1;
-            }
-        }
-        if (useThreatMemory) {
-            for (WalkPosition wp : Main.threatMemoryMap.keySet()) {
-                Main.threatArray[wp.getX()][wp.getY()] = 1;
-            }
-        }
-
-        ArrayList<WalkPosition> unchecked = new ArrayList<>();
-        if ((isUnderThreat(ground, start, useActiveThreatMap, useThreatMemory) || !Main.bw.getBWMap().isValidPosition(start))) {
-            return null;
-        } else {
-            Main.threatArray[start.getX()][start.getY()] = 1;
-            unchecked.add(start);
-        }
-        while (!unchecked.isEmpty()) {
-            ArrayList<WalkPosition> newWps = new ArrayList<>();
-            for (WalkPosition uc : unchecked) {
-                if (endPoints.contains(uc)) {
-                    return uc;
-                }
-                int x = uc.getX();
-                int y = uc.getY();
-                x = uc.getX() + 1;
-                y = uc.getY();
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0 && Main.areaDataArray[x][y] == areaId && isPassableGround(x, y)) {
-                    for (WalkPosition end : endPoints) {
-                        if (end.getX() == x && end.getY() == y) {
-                            return uc;
-                        }
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-                x = uc.getX() - 1;
-                y = uc.getY();
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0 && Main.areaDataArray[x][y] == areaId && isPassableGround(x, y)) {
-                    for (WalkPosition end : endPoints) {
-                        if (end.getX() == x && end.getY() == y) {
-                            return uc;
-                        }
-                        Main.threatArray[x][y] = 1;
-                        newWps.add(new WalkPosition(x, y));
-                    }
-                }
-                x = uc.getX();
-                y = uc.getY() - 1;
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0 && Main.areaDataArray[x][y] == areaId && isPassableGround(x, y)) {
-                    for (WalkPosition end : endPoints) {
-                        if (end.getX() == x && end.getY() == y) {
-                            return uc;
-                        }
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-                x = uc.getX();
-                y = uc.getY() + 1;
-                if (isWalkPositionOnTheMap(x, y) && Main.threatArray[x][y] == 0 && Main.areaDataArray[x][y] == areaId && isPassableGround(x, y)) {
-                    for (WalkPosition end : endPoints) {
-
-                        if (end.getX() == x && end.getY() == y) {
-                            return uc;
-                        }
-                    }
-                    Main.threatArray[x][y] = 1;
-                    newWps.add(new WalkPosition(x, y));
-                }
-            }
-            unchecked = newWps;
-        }
-        return null;
-    }
-    */
 
     public static int findCommonAreaId(ChokePoint cp1, ChokePoint cp2) {
         for (WalkPosition wp1 : cp1.getGeometry()) {
@@ -1427,40 +1186,6 @@ public class Cartography {
         }
         return -1;
     }
-/*
-    //Only applies to ground pathfinding
-    public static ArrayList<WalkPosition> findAnyPathMultiArea(WalkPosition start, WalkPosition end, boolean useActiveThreatMap, boolean useThreatMemory, boolean givePartialPath) {
-        ArrayList<WalkPosition> summaryPath = new ArrayList<>();
-        CPPath bwemPath = Main.bwem.getMap().getPath(start.toPosition(), end.toPosition());
-        boolean fullPathExists = true;
-        int lps = 0;
-        if (bwemPath.size() == 0) {
-            if (pathExistsFloodFillArray(start, end, true, useActiveThreatMap, useThreatMemory)) {
-                return findUnthreatenedPathInAreaJPS(start, end, true, useActiveThreatMap, useThreatMemory, Main.areaDataArray[start.getX()][start.getY()]);
-            }
-        } else if (bwemPath.size() >= 1) {
-            summaryPath.addAll(findAnyPathInArea(bwemPath.get(0), start, useActiveThreatMap, useThreatMemory));
-            for (int cc = 1; cc< bwemPath.size(); cc++ ) {
-                lps++;
-                ArrayList<WalkPosition> pathInArea = findAnyPathInArea(bwemPath.get(cc), bwemPath.get(cc-1), useActiveThreatMap, useThreatMemory);
-                if (pathInArea.size() >0 ) {
-                    summaryPath.addAll(pathInArea);
-                } else {
-                    fullPathExists = false;
-                    //no path!
-                    break;
-                }
-            }
-            if (!fullPathExists && !givePartialPath) {
-                summaryPath = new ArrayList<>();
-            } else {
-                summaryPath.addAll(findAnyPathInArea(bwemPath.get(bwemPath.size() - 1), end, useActiveThreatMap, useThreatMemory));
-            }
-        }
-        System.out.println("lööps:"+lps);
-        return  summaryPath;
-    }
-    */
 
     public static ArrayList<WalkPosition> findAnyPathMultiAreaContinuous(WalkPosition start, WalkPosition end, boolean useActiveThreatMap, boolean useThreatMemory, boolean givePartialPath) {
         ArrayList<WalkPosition> summaryPath = new ArrayList<>();
@@ -1471,7 +1196,7 @@ public class Cartography {
         int level = 0; //Counter for the level we are in
 
         if (bwemPath.size() == 0) {
-                return findUnthreatenedPathInAreaJPS2(start, end, true, useActiveThreatMap, useThreatMemory, Main.areaDataArray[start.getX()][start.getY()]);
+            return findUnthreatenedPathInAreaJPS(start, end, true, useActiveThreatMap, useThreatMemory, Main.areaDataArray[start.getX()][start.getY()]);
         } else if (bwemPath.size() >= 1) {
             //Saving the areadata values
             for (ChokePoint cp : bwemPath) {
@@ -1482,28 +1207,29 @@ public class Cartography {
                 }
                 originalAreaValues.add(cpData);
             }
-
             while (level <= bwemPath.size() && fullPathExists) {
-                WalkPosition startTile = null;
-                WalkPosition endTile = null;
+                WalkPosition startTile;
+                WalkPosition endTile;
                 int areaId = -3;
+                if (pathPieces.size() > level) {
+                    level++;
+                }
+                if (level == 0) {
+                    startTile = start;
+                    endTile = getFirstUnthreatenedPassable(bwemPath.get(level));
+                    areaId = Main.areaDataArray[start.getX()][start.getY()];
 
-                    if (level == 0) {
-                        startTile = start;
-                        endTile = getFirstUnthreatened(bwemPath.get(level));
-                        areaId = Main.areaDataArray[start.getX()][start.getY()];
-
-                    } else if (level == bwemPath.size()) {
-                        startTile = getFirstUnthreatened(bwemPath.get(level - 1));
-                        endTile = end;
-                        areaId = Main.areaDataArray[end.getX()][end.getY()];
-                    } else {
-                        startTile = getFirstUnthreatened(bwemPath.get(level - 1));
-                        endTile = getFirstUnthreatened(bwemPath.get(level));
-                        if (endTile != null) {
-                            areaId = Main.areaDataArray[endTile.getX()][endTile.getY()];
-                        }
+                } else if (level == bwemPath.size()) {
+                    startTile = getFirstUnthreatenedPassable(bwemPath.get(level - 1));
+                    endTile = end;
+                    areaId = Main.areaDataArray[end.getX()][end.getY()];
+                } else {
+                    startTile = getFirstUnthreatenedPassable(bwemPath.get(level - 1));
+                    endTile = getFirstUnthreatenedPassable(bwemPath.get(level));
+                    if (endTile != null) {
+                        areaId = Main.areaDataArray[endTile.getX()][endTile.getY()];
                     }
+                }
 
                 if (startTile == null || endTile == null) {
                     fullPathExists = false;
@@ -1519,8 +1245,7 @@ public class Cartography {
                 boolean excludeStart = false, excludeEnd = false;
 
 
-
-                ArrayList<WalkPosition> partialPath = findUnthreatenedPathInAreaJPS2(startTile,endTile, true, useActiveThreatMap, useThreatMemory, areaId);
+                ArrayList<WalkPosition> partialPath = findUnthreatenedPathInAreaJPS(startTile, endTile, true, useActiveThreatMap, useThreatMemory, areaId);
                 if (partialPath.size() > 0) {
                     if (pathPieces.size() <= level) {
                         pathPieces.add(partialPath);
@@ -1531,6 +1256,8 @@ public class Cartography {
                 } else {
                     if (level == 0) {
                         excludeEnd = true;
+                    } else if (level == bwemPath.size()) {
+                        excludeStart = true;
                     } else {
                         excludeStart = true;
                         level--;
@@ -1561,7 +1288,6 @@ public class Cartography {
             }
 
         }
-
         if (fullPathExists) {
             for (ArrayList<WalkPosition> a : pathPieces) {
                 summaryPath.addAll(a);
@@ -1570,52 +1296,72 @@ public class Cartography {
             if (givePartialPath) {
                 for (ArrayList<WalkPosition> a : pathPieces) {
                     summaryPath.addAll(a);
-                }
+                    Collections.reverse(summaryPath);
+                    ;
+                    if (level == bwemPath.size()) {
+                        //Cannot find path to the endpoint in the last area
+                        summaryPath.add(getApproachPoint(summaryPath.get(summaryPath.size() - 1), end, true, useActiveThreatMap, useThreatMemory, Main.areaDataArray[end.getX()][end.getY()]));
+                    } else if (level > 0) {
+                        int borderAreaId = findCommonAreaId(bwemPath.get(level - 1), bwemPath.get(level));
 
+                        int[] startValues = new int[bwemPath.get(level-1).getGeometry().size()];
+                        int[] endValues = new int[bwemPath.get(level).getGeometry().size()];
+                        int i = 0;
+                        for (WalkPosition startWp : bwemPath.get(level-1).getGeometry()) {
+                            startValues[i++] = Main.areaDataArray[startWp.getX()][startWp.getY()];
+                            Main.areaDataArray[startWp.getX()][startWp.getY()] = borderAreaId;
+                        }
+
+                        i = 0;
+                        for (WalkPosition endWp : bwemPath.get(level).getGeometry()) {
+                            endValues[i++] = Main.areaDataArray[endWp.getX()][endWp.getY()];
+                            Main.areaDataArray[endWp.getX()][endWp.getY()] = borderAreaId;
+                        }
+
+                        WalkPosition startTile = getFirstUnthreatenedPassable(bwemPath.get(level - 1));
+                        Set<WalkPosition> threatBorder = getThreatBorder(useActiveThreatMap, useThreatMemory, borderAreaId);
+                        for (WalkPosition wp : threatBorder) {
+                            ArrayList<WalkPosition> pathToBorder = findUnthreatenedPathInAreaJPS(startTile, wp, true, useActiveThreatMap, useThreatMemory, borderAreaId);
+                            if (!pathToBorder.isEmpty()) {
+                                Collections.reverse(pathToBorder);
+                                summaryPath.addAll(pathToBorder);
+                                break;
+                            }
+                        }
+
+                        i = 0;
+                        for (WalkPosition startWp : bwemPath.get(level-1).getGeometry()) {
+                            Main.areaDataArray[startWp.getX()][startWp.getY()] = borderAreaId = startValues[i++];
+                        }
+
+                        i = 0;
+                        for (WalkPosition endWp : bwemPath.get(level).getGeometry()) {
+                            Main.areaDataArray[endWp.getX()][endWp.getY()] = borderAreaId = endValues[i++];
+                        }
+
+                    }
+                }
             }
         }
-        return  summaryPath;
+        return summaryPath;
     }
 
-    public static WalkPosition getFirstUnthreatened(ChokePoint cp) {
+
+
+
+    public static WalkPosition getFirstUnthreatenedPassable(ChokePoint cp) {
         WalkPosition tile = null;
         for (WalkPosition wp : cp.getGeometry()) {
-            if (Main.areaDataArray[wp.getX()][wp.getY()] != -1) {
+            if (isWalkPositionOnTheMap(wp.getX(), wp.getY()) &&
+                    (Main.occupiedGroundArray[wp.getX()][wp.getY()] < 0 ||
+                            (Main.frameCount - Main.occupiedGroundArray[wp.getX()][wp.getY()]) > GROUND_FORGET_PERIOD)
+                    && Main.areaDataArray[wp.getX()][wp.getY()] > 0) {
                 tile = wp;
                 break;
             }
         }
         return tile;
     }
-
-
-/*
-    public static ArrayList<WalkPosition> findAnyPathInArea(ChokePoint cp, WalkPosition start, boolean useActiveThreatMap, boolean useThreatMemory) {
-
-        int startAreaId = Main.areaDataArray[start.getX()][start.getY()];
-        int cpData[] = new int[cp.getGeometry().size()];
-        ArrayList<WalkPosition> path = new ArrayList<>();
-
-        int i =0;
-        for (WalkPosition wp : cp.getGeometry()) {
-            cpData[i++] = Main.areaDataArray[wp.getX()][wp.getY()];
-            Main.areaDataArray[wp.getX()][wp.getY()] = startAreaId;
-        }
-
-
-        WalkPosition end = pathExistsInArea(start, cp.getGeometry(), true, useActiveThreatMap, useThreatMemory, startAreaId);
-        if (end != null) {
-            path = findUnthreatenedPathInAreaJPS(start, end, true, useActiveThreatMap, useThreatMemory, startAreaId);
-        }
-
-        i =0;
-        for (Integer id : cpData) {
-            Main.areaDataArray[cp.getGeometry().get(i).getX()][cp.getGeometry().get(i).getY()] = id;
-            i++;
-        }
-        return  path;
-    }
-    */
 
     public static ArrayList<WalkPosition> findAnyPathInArea(ChokePoint cp1, ChokePoint cp2, boolean useActiveThreatMap, boolean useThreatMemory) {
         int areaId = findCommonAreaId(cp1, cp2);
@@ -1677,8 +1423,6 @@ public class Cartography {
         //return findUnthreatenedPathInAreaJPS(start, end, true, useActiveThreatMap, useThreatMemory, areaId);
     }
 
-
-    //WIP
     public static ArrayList<WalkPosition> findUnthreatenedPathInAreaJPS(WalkPosition start, WalkPosition end, boolean ground, boolean useActiveThreatMap, boolean useThreatMemory, int areaId) {
         boolean foundPath = false;
         PriorityQueue<JPSInfo> straight = new PriorityQueue<>(new JPSInfoComparator());
@@ -1724,199 +1468,14 @@ public class Cartography {
 
             if (straightNext) {
                 jumpPoint = straight.poll();
-                Direction dir = jumpPoint.getDirection();
                 //Straight path processing
                 boolean straightPathProcessed = false;
                 WalkPosition current = jumpPoint.getWalkPosition();
                 WalkPosition ahead = getNeighborInDirection(current, jumpPoint.getDirection());
                 while (!straightPathProcessed) {
                     //Terminate search if the next tile in the direction is under threat/impassable
-                    if (isUnderThreat(ground, ahead, useActiveThreatMap, useThreatMemory) || !Main.bw.getBWMap().isValidPosition(ahead) || (ground && !isPassableGround(ahead)) && !isWalkPositionInArea(ahead, areaId)) {
-                        straightPathProcessed = true;
-                    }
-                    if (ahead.equals(end)) {
-                        straightPathProcessed = true;
-                        foundPath = true;
-                        endJPSInfo = new JPSInfo(null, ahead, 0, jumpPoint);
-                        break;
-                    }
-                    //Check neighbors to the left and right
-                    HashSet<Direction> checkDirs = straightCheckPos.get(jumpPoint.getDirection());
-                    for (Direction checkDir : checkDirs) {
-                        WalkPosition straightNeighbor = getNeighborInDirection(current, checkDir);
-                        if (Main.bw.getBWMap().isValidPosition(straightNeighbor)) {
-                            if (isUnderThreat(ground, straightNeighbor, useActiveThreatMap, useThreatMemory) || (ground && !isPassableGround(straightNeighbor)) || !isWalkPositionInArea(straightNeighbor, areaId)) {
-                                WalkPosition diagWP = getNeighborInDirection(current, getJPDirections(jumpPoint.getDirection(), checkDir).iterator().next());
-                                if (Main.bw.getBWMap().isValidPosition(diagWP) && !isUnderThreat(ground, diagWP, useActiveThreatMap, useThreatMemory) && isPassableGround(diagWP) && isWalkPositionInArea(diagWP, areaId)) {
-                                    Direction jpsDir = getJPDirections(jumpPoint.getDirection(), checkDir).iterator().next();
-                                    JPSInfo jpsInfo = new JPSInfo(jpsDir, getNeighborInDirection(current, jpsDir), calcJPSImportance(diagWP, start, end, jumpPoint.getGeneration(), jpsDir), jumpPoint);
-                                    //if (!processed.contains(jpsInfo)) {
-                                        diag.add(jpsInfo);
-                                      //  processed.add(jpsInfo);
-                                    //}
-                                }
-                            }
-                        }
-                    }
-                        current = ahead;
-                        ahead = getNeighborInDirection(ahead, jumpPoint.getDirection());
-                }
-            }
-           else {
-                jumpPoint = diag.poll();
-                if (jumpPoint.getWalkPosition().equals(end)) {
-                    foundPath = true;
-                    endJPSInfo = new JPSInfo(null, jumpPoint.getWalkPosition(), 0, jumpPoint);
-                    break;
-                } else {
-                    WalkPosition diagAhead = getNeighborInDirection(jumpPoint.getWalkPosition(), jumpPoint.getDirection());
-                    if (jumpPoint.getWalkPosition().equals(end)) {
-                        foundPath = true;
-                        endJPSInfo = new JPSInfo(null, diagAhead, 0, jumpPoint);
-                        break;
-                    }
-
-                    //If the next tile in the diagonal direction isn't blocked, let's add that too
-                    if (!isUnderThreat(ground, diagAhead, useActiveThreatMap, useThreatMemory) && Main.bw.getBWMap().isValidPosition(diagAhead) && isWalkPositionInArea(diagAhead, areaId)) {
-                        JPSInfo jpsInfo = null;
-                        if (Main.bw.getBWMap().isValidPosition(diagAhead)) {
-                            if (ground) {
-                                if (isPassableGround(diagAhead)) {
-                                    jpsInfo = new JPSInfo(jumpPoint.getDirection(), diagAhead, calcJPSImportance(diagAhead, start, end, jumpPoint.getGeneration(), jumpPoint.getDirection()), jumpPoint);
-                                }
-                            } else {
-                                jpsInfo = new JPSInfo(jumpPoint.getDirection(), diagAhead, calcJPSImportance(diagAhead, start, end, jumpPoint.getGeneration(), jumpPoint.getDirection()), jumpPoint);
-                            }
-                        }
-                        if (jpsInfo != null) {
-                        //    if (!processed.contains(jpsInfo)) {
-                                diag.add(jpsInfo);
-                          //      processed.add(jpsInfo);
-                           // }
-                        }
-                    }
-                    //Check the 2 straight jump points in any case
-                    for (Direction dir : diagForwardPos.get(jumpPoint.getDirection())) {
-                        WalkPosition neighbor = getNeighborInDirection(jumpPoint.getWalkPosition(), dir);
-                        Set<JPSInfo> jpsInfosInDirection;
-                        if (!isUnderThreat(ground, neighbor, useActiveThreatMap, useThreatMemory) && isWalkPositionInArea(neighbor, areaId))
-                            if (ground) {
-                                if (isPassableGround(neighbor)) {
-                                    jpsInfosInDirection = getJPSInfosInDirection(jumpPoint, jumpPoint.getWalkPosition(), start, end, ground, useActiveThreatMap, useThreatMemory, dir);
-                                    for (JPSInfo j : jpsInfosInDirection) {
-                                     //   if (!processed.contains(j)) {
-                                            straight.addAll(jpsInfosInDirection);
-                                       //     processed.addAll(jpsInfosInDirection);
-                                        //}
-                                    }
-                                }
-                            } else {
-                                jpsInfosInDirection = getJPSInfosInDirection(jumpPoint, jumpPoint.getWalkPosition(), start, end, ground, useActiveThreatMap, useThreatMemory, dir);
-                                for (JPSInfo j : jpsInfosInDirection) {
-                                //    if (!processed.contains(j)) {
-                                        straight.addAll(jpsInfosInDirection);
-                                  //      processed.addAll(jpsInfosInDirection);
-                                   // }
-                                }
-                            }
-                    }
-                    //Check the two remaining straight directions
-                    for (Direction checkDir : diagCheckPos.get(jumpPoint.getDirection())) {
-                        WalkPosition wp = getNeighborInDirection(diagAhead, checkDir);
-                        if (Main.bw.getBWMap().isValidPosition(wp) && isUnderThreat(ground, wp, useActiveThreatMap, useThreatMemory)) {
-                            Set<JPSInfo> jpsInfosInDirection = getJPSInfosInDirection(jumpPoint, wp, start, end, ground, useActiveThreatMap, useThreatMemory, getJPDirections(jumpPoint.getDirection(), checkDir));
-                            for (JPSInfo j : jpsInfosInDirection) {
-                                if (isWalkPositionInArea(j.getWalkPosition(), areaId)) {
-                                    if (ground) {
-                                        if (isPassableGround(j.getWalkPosition())) {
-                                    //        if (!processed.contains(j)) {
-                                                diag.add(j);
-                                      //          processed.add(j);
-                                        //    }
-                                        }
-                                    } else {
-                                        //if (!processed.contains(j)) {
-                                            diag.add(j);
-                                          //  processed.add(j);
-                                        //}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        ArrayList<WalkPosition> patherino = new ArrayList<>();
-        JPSInfo precc;
-
-        if (endJPSInfo != null) {
-            patherino.add(end);
-            precc = endJPSInfo.getPrecursor();
-            while (precc != null) {
-                patherino.add(precc.getWalkPosition());
-                precc = precc.getPrecursor();
-            }
-        }
-        return patherino;
-    }
-
-
-
-
-    public static ArrayList<WalkPosition> findUnthreatenedPathInAreaJPS2(WalkPosition start, WalkPosition end, boolean ground, boolean useActiveThreatMap, boolean useThreatMemory, int areaId) {
-        boolean foundPath = false;
-        PriorityQueue<JPSInfo> straight = new PriorityQueue<>(new JPSInfoComparator());
-        PriorityQueue<JPSInfo> diag = new PriorityQueue<>(new JPSInfoComparator());
-        JPSInfo startJPSInfo = new JPSInfo(null, start, 0, null);
-
-        JPSInfo endJPSInfo = null;
-        Set<JPSInfo> straightJPSInfos = getJPSInfosInDirection(startJPSInfo, start, start, end, ground, useActiveThreatMap, useThreatMemory, Direction.E, Direction.W, Direction.S, Direction.N);
-        straight.addAll(straightJPSInfos);
-
-        Set<JPSInfo> diagJPSInfos = getJPSInfosInDirection(startJPSInfo, start, start, end, ground, useActiveThreatMap, useThreatMemory, Direction.NE, Direction.NW, Direction.SE, Direction.SW);
-        diag.addAll(diagJPSInfos);
-
-        HashSet<JPSInfo> processed = new HashSet<>();
-        processed.addAll(straightJPSInfos);
-        processed.addAll(diagJPSInfos);
-
-        if (isUnderThreat(ground, start, useActiveThreatMap, useThreatMemory) || isUnderThreat(ground, end, useActiveThreatMap, useThreatMemory)
-                || !Main.bw.getBWMap().isValidPosition(start)
-                || !Main.bw.getBWMap().isValidPosition(end)) {
-            foundPath = true;
-        }
-
-        if (ground) {
-            if (!isPassableGround(start) || !isPassableGround(end)) {
-                foundPath = true;
-            }
-        }
-        while (!foundPath && (!straight.isEmpty() || !diag.isEmpty())) {
-            int sImp = Integer.MAX_VALUE;
-            int dImp = Integer.MAX_VALUE;
-            JPSInfo jumpPoint;
-            boolean straightNext = false;
-            if (!straight.isEmpty()) {
-                sImp = straight.peek().getImportance();
-            }
-            if (!diag.isEmpty()) {
-                dImp = diag.peek().getImportance();
-            }
-            if (sImp <= dImp) {
-                straightNext = true;
-            }
-
-            if (straightNext) {
-                jumpPoint = straight.poll();
-                Direction dir = jumpPoint.getDirection();
-                //Straight path processing
-                boolean straightPathProcessed = false;
-                WalkPosition current = jumpPoint.getWalkPosition();
-                WalkPosition ahead = getNeighborInDirection(current, jumpPoint.getDirection());
-                while (!straightPathProcessed) {
-                    //Terminate search if the next tile in the direction is under threat/impassable
-                    if (isUnderThreat(ground, ahead, useActiveThreatMap, useThreatMemory) || !Main.bw.getBWMap().isValidPosition(ahead) || (ground && !isPassableGround(ahead)) && !isWalkPositionInArea(ahead, areaId)) {
+                    if (isUnderThreat(ground, ahead, useActiveThreatMap, useThreatMemory)
+                            || !Main.bw.getBWMap().isValidPosition(ahead) || (ground && !isPassableGround(ahead)) && !isWalkPositionInArea(ahead, areaId)) {
                         straightPathProcessed = true;
                     }
                     if (ahead.equals(end)) {
@@ -1936,8 +1495,8 @@ public class Cartography {
                                     Direction jpsDir = getJPDirections(jumpPoint.getDirection(), checkDir).iterator().next();
                                     JPSInfo jpsInfo = new JPSInfo(jpsDir, getNeighborInDirection(current, jpsDir), calcJPSImportance(diagWP, start, end, jumpPoint.getGeneration(), jpsDir), jumpPoint);
                                     if (!processed.contains(jpsInfo)) {
-                                    diag.add(jpsInfo);
-                                     processed.add(jpsInfo);
+                                        diag.add(jpsInfo);
+                                        processed.add(jpsInfo);
                                     }
                                 }
                             }
@@ -1946,8 +1505,7 @@ public class Cartography {
                     current = ahead;
                     ahead = getNeighborInDirection(ahead, jumpPoint.getDirection());
                 }
-            }
-            else {
+            } else {
                 jumpPoint = diag.poll();
                 if (jumpPoint.getWalkPosition().equals(end)) {
                     foundPath = true;
@@ -1974,28 +1532,33 @@ public class Cartography {
                             }
                         }
                         if (jpsInfo != null) {
-                                if (!processed.contains(jpsInfo)) {
-                            diag.add(jpsInfo);
-                                  processed.add(jpsInfo);
-                             }
+                            if (!processed.contains(jpsInfo)) {
+                                diag.add(jpsInfo);
+                                processed.add(jpsInfo);
+                            }
                         }
                     }
                     //Check the 2 straight jump points in any case
                     for (Direction dir : diagForwardPos.get(jumpPoint.getDirection())) {
                         WalkPosition neighbor = getNeighborInDirection(jumpPoint.getWalkPosition(), dir);
-                       // Set<JPSInfo> jpsInfosInDirection;
                         if (!isUnderThreat(ground, neighbor, useActiveThreatMap, useThreatMemory) && isWalkPositionInArea(neighbor, areaId))
                             if (ground) {
                                 if (isPassableGround(neighbor)) {
-                                        JPSInfo[] jpsInfosArrayInDirection = getJPSInfosArrayInDirection(jumpPoint, jumpPoint.getWalkPosition(), start, end, ground, useActiveThreatMap, useThreatMemory, dir);
-                                        for (int j =0; j<jpsInfosArrayInDirection.length;j++){
+                                    JPSInfo[] jpsInfosArrayInDirection = getJPSInfosArrayInDirection(jumpPoint, jumpPoint.getWalkPosition(), start, end, ground, useActiveThreatMap, useThreatMemory, dir);
+                                    for (int j = 0; j < jpsInfosArrayInDirection.length; j++) {
+                                        if (!processed.contains(jpsInfosArrayInDirection[j])) {
                                             straight.add(jpsInfosArrayInDirection[j]);
+                                            processed.add(jpsInfosArrayInDirection[j]);
                                         }
+                                    }
                                 }
                             } else {
                                 JPSInfo[] jpsInfosArrayInDirection = getJPSInfosArrayInDirection(jumpPoint, jumpPoint.getWalkPosition(), start, end, ground, useActiveThreatMap, useThreatMemory, dir);
-                                for (int j =0; j<jpsInfosArrayInDirection.length;j++) {
-                                    straight.add(jpsInfosArrayInDirection[j]);
+                                for (int j = 0; j < jpsInfosArrayInDirection.length; j++) {
+                                    if (!processed.contains(jpsInfosArrayInDirection[j])) {
+                                        straight.add(jpsInfosArrayInDirection[j]);
+                                        processed.add(jpsInfosArrayInDirection[j]);
+                                    }
                                 }
                             }
                     }
@@ -2003,17 +1566,23 @@ public class Cartography {
                     for (Direction checkDir : diagCheckPos.get(jumpPoint.getDirection())) {
                         WalkPosition wp = getNeighborInDirection(diagAhead, checkDir);
                         if (Main.bw.getBWMap().isValidPosition(wp) && isUnderThreat(ground, wp, useActiveThreatMap, useThreatMemory)) {
-                           // Set<JPSInfo> jpsInfosInDirection = getJPSInfosInDirection(jumpPoint, wp, start, end, ground, useActiveThreatMap, useThreatMemory, getJPDirections(jumpPoint.getDirection(), checkDir));
-                            Direction[] dirs = (Direction[]) getJPDirections(jumpPoint.getDirection(), checkDir).toArray();
-                            JPSInfo[] jpsInfosArrayInDirection = getJPSInfosArrayInDirection(jumpPoint, wp, start, end, ground, useActiveThreatMap, useThreatMemory, dirs);
-                            for (int j =0; j<jpsInfosArrayInDirection.length;j++) {
-                                if (isWalkPositionInArea(jpsInfosArrayInDirection[j].getWalkPosition(), areaId)) {
+                            Set<Direction> jpDirections = getJPDirections(jumpPoint.getDirection(), checkDir);
+                            Direction [] dirs = new Direction[jpDirections.size()];
+                            JPSInfo[] jpsInfosArrayInDirection = getJPSInfosArrayInDirection(jumpPoint, wp, start, end, ground, useActiveThreatMap, useThreatMemory, jpDirections.toArray(dirs));
+                            for (int j = 0; j < jpsInfosArrayInDirection.length; j++) {
+                                if (jpsInfosArrayInDirection[j] != null && isWalkPositionInArea(jpsInfosArrayInDirection[j].getWalkPosition(), areaId)) {
                                     if (ground) {
                                         if (isPassableGround(jpsInfosArrayInDirection[j].getWalkPosition())) {
-                                            diag.add(jpsInfosArrayInDirection[j]);
+                                            if (!processed.contains(jpsInfosArrayInDirection[j])) {
+                                                diag.add(jpsInfosArrayInDirection[j]);
+                                                processed.add(jpsInfosArrayInDirection[j]);
+                                            }
                                         }
                                     } else {
-                                        diag.add(jpsInfosArrayInDirection[j]);
+                                        if (!processed.contains(jpsInfosArrayInDirection[j])) {
+                                            diag.add(jpsInfosArrayInDirection[j]);
+                                            processed.add(jpsInfosArrayInDirection[j]);
+                                        }
                                     }
                                 }
                             }
@@ -2036,11 +1605,24 @@ public class Cartography {
         return patherino;
     }
 
+
+
     public static boolean isWalkPositionInArea(WalkPosition wp, int areaId) {
         if (wp.getX() <= 0 || wp.getY() <= 0) {
             return false;
         }
         if (Main.areaDataArray[wp.getX()][wp.getY()] == areaId) {
+            return true;
+        }
+        return false;
+    }
+
+
+    public static boolean isWalkPositionCoordsInArea(int x, int y, int areaId) {
+        if (x <= 0 || y <= 0) {
+            return false;
+        }
+        if (Main.areaDataArray[x][y] == areaId) {
             return true;
         }
         return false;
@@ -2066,7 +1648,7 @@ public class Cartography {
         WalkPosition approachPoint = null;
         int currentDist = 1;
         while (approachPoint == null && currentDist < maxDist ) {
-            Set<WalkPosition> positions = getWalkPositionsInGridRadius(start, currentDist);
+            Set<WalkPosition> positions = getWalkPositionsInGridRadius(end, currentDist);
             int minPathLength = Integer.MAX_VALUE;
             for (WalkPosition wp : positions) {
                 if (isWalkPositionOnTheMap(wp.getX(), wp.getY())
@@ -2095,6 +1677,33 @@ public class Cartography {
         } else {
             return 0;
         }
+    }
+
+    public static Set<WalkPosition> getThreatBorder(boolean useActiveThreatMap, boolean useThreatMemory, int areaId) {
+        HashSet<WalkPosition> border = new HashSet<>();
+        for (int x = 0; x < Main.areaDataArray.length; x++) {
+            for (int y = 0; y < Main.areaDataArray[0].length; y++) {
+                if (Main.areaDataArray[x][y] == areaId) {
+                    if (useActiveThreatMap && Main.activeThreatMapArray[x][y] == null) {
+                        if ((isWalkPositionOnTheMap(x + 1, y) && Main.activeThreatMapArray[x + 1][y] != null)
+                                || (isWalkPositionOnTheMap(x - 1, y) && Main.activeThreatMapArray[x - 1][y] != null)
+                                || (isWalkPositionOnTheMap(x, y + 1) && Main.activeThreatMapArray[x][y + 1] != null)
+                                || (isWalkPositionOnTheMap(x, y - 1) && Main.activeThreatMapArray[x][y - 1] != null)) {
+                            border.add(new WalkPosition(x, y));
+                        }
+                    }
+                    if (useThreatMemory && Main.threatMemoryMapArray[x][y] == null) {
+                        if ((isWalkPositionOnTheMap(x + 1, y) && Main.threatMemoryMapArray[x + 1][y] != null)
+                                || (isWalkPositionOnTheMap(x - 1, y) && Main.threatMemoryMapArray[x - 1][y] != null)
+                                || (isWalkPositionOnTheMap(x, y + 1) && Main.threatMemoryMapArray[x][y + 1] != null)
+                                || (isWalkPositionOnTheMap(x, y - 1) && Main.threatMemoryMapArray[x][y - 1] != null)) {
+                            border.add(new WalkPosition(x, y));
+                        }
+                    }
+                }
+            }
+        }
+        return border;
     }
 
 }
